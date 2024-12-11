@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build: [linux, windows, macos]
+        build: [linux, windows, macos, ios]
         arch: [x64, arm64]
         include:
           - build: linux
@@ -40,6 +40,12 @@ jobs:
             os: macos-latest
             arch: universal
             triplet: osx-release
+            vcpkg-root: /Users/runner/vcpkg
+            extra-args: --overlay-triplets=./triplets
+          - build: ios
+            os: macos-latest
+            arch: arm64
+            triplet: ios-release
             vcpkg-root: /Users/runner/vcpkg
             extra-args: --overlay-triplets=./triplets
 
