@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build: [linux, windows, macos, ios]
+        build: [linux, windows, macos]
         arch: [x64, arm64]
         include:
           - build: linux
