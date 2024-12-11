@@ -45,7 +45,7 @@ jobs:
           - build: ios
             os: macos-latest
             arch: arm64
-            triplet: ios-release
+            triplet: ios
             vcpkg-root: /Users/runner/vcpkg
             extra-args: --overlay-triplets=./triplets
 
