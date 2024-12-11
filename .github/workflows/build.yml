@@ -23,6 +23,12 @@ jobs:
             arch: x64
           - build: android
             arch: arm
+          - build: ios
+            arch: x64
+          - build: ios
+            arch: arm
+        build: [linux, windows, macos, ios]
+        arch: [x64, arm64]
         include:
           - build: linux
             os: ubuntu-latest
@@ -56,6 +62,12 @@ jobs:
             triplet: android-static-release
             vcpkg-root: /usr/local/share/vcpkg
             extra-args: ""
+          - build: ios
+            os: macos-latest
+            arch: arm64
+            triplet: ios-release
+            vcpkg-root: /Users/runner/vcpkg
+            extra-args: --overlay-triplets=./triplets
 
     steps:
       - run: git config --global core.autocrlf input
