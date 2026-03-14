@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: C/C++ CI
 
-on: [push]
+on: workflow_dispatch
 
 jobs:
 
@@ -27,8 +27,6 @@ jobs:
             arch: x64
           - build: ios
             arch: arm
-        build: [linux, windows, macos, ios]
-        arch: [x64, arm64]
         include:
           - build: linux
             os: ubuntu-latest
