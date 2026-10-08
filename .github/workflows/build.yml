@@ -12,8 +12,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build: [linux, windows, macos]
-        arch: [x64, arm64]
+        build: [linux, windows, macos, android, ios]
+        arch: [x64, arm, arm64]
+        exclude:
+          - build: windows
+            arch: arm
+          - build: macos
+            arch: arm
+          - build: android
+            arch: x64
+          - build: android
+            arch: arm
+          - build: ios
+            arch: x64
+          - build: ios
+            arch: arm
         include:
           - build: linux
             os: ubuntu-latest
@@ -42,6 +55,11 @@ jobs:
             triplet: osx-release
             vcpkg-root: /Users/runner/vcpkg
             extra-args: --overlay-triplets=./triplets
+          - build: android
+            os: ubuntu-latest
+            triplet: android-static-release
+            vcpkg-root: /usr/local/share/vcpkg
+            extra-args: ""
           - build: ios
             os: macos-latest
             arch: arm64
@@ -72,8 +90,14 @@ jobs:
 
       - name: Set up build environment (ubuntu-latest)
         run: |
+          sudo apt-get update
           sudo apt -y install nasm
         if: matrix.os == 'ubuntu-latest'
+
+      - name: Set up build environment (arm ubuntu-latest)
+        run: |
+          sudo apt-get install -qy binutils-arm-linux-gnueabihf gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'arm'
 
       - name: Set up build environment (arm64 ubuntu-latest)
         run: |
@@ -107,17 +131,17 @@ jobs:
 
   create-release:
     needs: [build]
-    runs-on: "ubuntu-20.04"
+    runs-on: "ubuntu-24.04"
     if: github.ref == 'refs/heads/master'
     permissions:
       contents: write
-      
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Download Artifacts
         uses: actions/download-artifact@v4
-        
+
       - name: Compute short git commit SHA
         run: |
           echo "COMMIT_SHORT_SHA=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV
