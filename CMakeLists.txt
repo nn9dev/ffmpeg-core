@@ -9,14 +9,14 @@ target_include_directories(${FFMPEG_CORE_NAME} INTERFACE "${CMAKE_CURRENT_SOURCE
 # Detect OS
 if (WIN32 AND NOT MINGW)
 	set(FFMPEG_PREBUILTS_NAME "ffmpeg-windows")
-elseif (IOS AND (CMAKE_OSX_SYSROOT MATCHES "iphonesimulator" OR ARCHITECTURE STREQUAL "x86_64"))
-	set(FFMPEG_PREBUILTS_NAME "ffmpeg-ios-simulator")
-elseif (IOS)
-	set(FFMPEG_PREBUILTS_NAME "ffmpeg-ios")
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+elseif (APPLE AND NOT IOS AND NOT IS_IOS_SIMULATOR)
 	set(FFMPEG_PREBUILTS_NAME "ffmpeg-macos")
 elseif (CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
 	set(FFMPEG_PREBUILTS_NAME "ffmpeg-freebsd")
+elseif (APPLE AND IOS AND NOT IS_IOS_SIMULATOR)
+	set(FFMPEG_PREBUILTS_NAME "ffmpeg-ios")
+elseif(APPLE AND IS_IOS_SIMULATOR)
+	set(FFMPEG_PREBUILTS_NAME "ffmpeg-ios-simulator")
 elseif (ANDROID)
 	set(FFMPEG_PREBUILTS_NAME "ffmpeg-android")
 elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -36,8 +36,10 @@ elseif(ARCHITECTURE STREQUAL "arm")
 	set(FFMPEG_PREBUILTS_NAME "${FFMPEG_PREBUILTS_NAME}-arm.zip")
 elseif(ARCHITECTURE STREQUAL "arm64")
 	set(FFMPEG_PREBUILTS_NAME "${FFMPEG_PREBUILTS_NAME}-arm64.zip")
-elseif(APPLE AND "x86_64" IN_LIST ARCHITECTURE AND "arm64" IN_LIST ARCHITECTURE) # macOS universal
+elseif(APPLE AND Darwin AND "x86_64" IN_LIST ARCHITECTURE AND "arm64" IN_LIST ARCHITECTURE) # macOS universal
 	set(FFMPEG_PREBUILTS_NAME "${FFMPEG_PREBUILTS_NAME}-universal.zip")
+elseif(IS_IOS_SIMULATOR)
+	message(STATUS "IS_IOS_SIMULATOR")
 else ()
 	message(FATAL_ERROR "Unsupported architecture.")
 endif()
@@ -50,22 +52,72 @@ execute_process(
 	OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 # Download prebuilt ffmpeg
-if(NOT EXISTS "${CMAKE_BINARY_DIR}/external/ffmpeg.zip")
-message(STATUS "Downloading FFMPEG prebuilt ${FFMPEG_PREBUILTS_NAME} for commit ${FFMPEG_GIT_SHA}...")
-	file(DOWNLOAD https://github.com/Vita3K/ffmpeg-core/releases/download/${FFMPEG_GIT_SHA}/${FFMPEG_PREBUILTS_NAME}
-		"${CMAKE_BINARY_DIR}/external/ffmpeg.zip" SHOW_PROGRESS
-		STATUS FILE_STATUS)
-	list(GET FILE_STATUS 0 STATUS_CODE)
-	if (NOT STATUS_CODE EQUAL 0)
-		file(REMOVE "${CMAKE_BINARY_DIR}/external/ffmpeg.zip") # CMake create 0 byte file even if URL is invalid. So need to delete it.
-		message(FATAL_ERROR "No FFMPEG prebuilt found with corresponding commit SHA (${FFMPEG_GIT_SHA})")
-	endif()
-endif()
+if(IS_IOS_SIMULATOR)
+    if(NOT EXISTS "${CMAKE_BINARY_DIR}/external/ffmpeg-ios-simulator-arm64.zip")
+        file(DOWNLOAD https://github.com/Vita3K/ffmpeg-core/releases/download/e744193/ffmpeg-ios-simulator-arm64.zip
+            "${CMAKE_BINARY_DIR}/external/ffmpeg-ios-simulator-arm64.zip" SHOW_PROGRESS
+            STATUS FILE_STATUS)
+        list(GET FILE_STATUS 0 STATUS_CODE)
+        if(NOT STATUS_CODE EQUAL 0)
+            file(REMOVE "${CMAKE_BINARY_DIR}/external/ffmpeg-ios-simulator-arm64.zip")
+            message(FATAL_ERROR "No FFMPEG prebuilt found with corresponding commit SHA (${FFMPEG_GIT_SHA})")
+        endif()
+    endif()
 
-if(NOT EXISTS "${CMAKE_BINARY_DIR}/external/ffmpeg/lib")
-	file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/external/ffmpeg/lib")
-	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf "${CMAKE_BINARY_DIR}/external/ffmpeg.zip"
-		WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/external/ffmpeg/lib")
+    if(NOT EXISTS "${CMAKE_BINARY_DIR}/external/ffmpeg-ios-simulator-x64.zip")
+        file(DOWNLOAD https://github.com/Vita3K/ffmpeg-core/releases/download/e744193/ffmpeg-ios-simulator-x64.zip
+            "${CMAKE_BINARY_DIR}/external/ffmpeg-ios-simulator-x64.zip" SHOW_PROGRESS
+            STATUS FILE_STATUS)
+        list(GET FILE_STATUS 0 STATUS_CODE)
+        if(NOT STATUS_CODE EQUAL 0)
+            file(REMOVE "${CMAKE_BINARY_DIR}/external/ffmpeg-ios-simulator-x64.zip")
+            message(FATAL_ERROR "No FFMPEG prebuilt found with corresponding commit SHA (${FFMPEG_GIT_SHA})")
+        endif()
+    endif()
+
+    if(NOT EXISTS "${CMAKE_BINARY_DIR}/external/ffmpeg/lib")
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/external/ffmpeg/lib")
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/external/ffmpeg/lib-arm64")
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/external/ffmpeg/lib-x64")
+
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf "${CMAKE_BINARY_DIR}/external/ffmpeg-ios-simulator-arm64.zip"
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/external/ffmpeg/lib-arm64")
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf "${CMAKE_BINARY_DIR}/external/ffmpeg-ios-simulator-x64.zip"
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/external/ffmpeg/lib-x64")
+
+        foreach(lib avformat avcodec swscale avutil avfilter swresample)
+            execute_process(COMMAND lipo -create
+                "${CMAKE_BINARY_DIR}/external/ffmpeg/lib-arm64/lib${lib}.a"
+                "${CMAKE_BINARY_DIR}/external/ffmpeg/lib-x64/lib${lib}.a"
+                -output "${CMAKE_BINARY_DIR}/external/ffmpeg/lib/lib${lib}.a"
+                RESULT_VARIABLE LIPO_RESULT)
+            if(NOT LIPO_RESULT EQUAL 0)
+                message(FATAL_ERROR "lipo failed for lib${lib}.a")
+            endif()
+        endforeach()
+
+        message(STATUS "iOS Simulator universal FFmpeg libs created, cleaning up...")
+        #file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/external/ffmpeg/lib-arm64")
+        #file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/external/ffmpeg/lib-x64")
+    endif()
+else()
+    if(NOT EXISTS "${CMAKE_BINARY_DIR}/external/ffmpeg.zip")
+        message(STATUS "Downloading FFMPEG prebuilt ${FFMPEG_PREBUILTS_NAME} for commit ${FFMPEG_GIT_SHA}...")
+        file(DOWNLOAD https://github.com/Vita3K/ffmpeg-core/releases/download/e744193/${FFMPEG_PREBUILTS_NAME}
+            "${CMAKE_BINARY_DIR}/external/ffmpeg.zip" SHOW_PROGRESS
+            STATUS FILE_STATUS)
+        list(GET FILE_STATUS 0 STATUS_CODE)
+        if(NOT STATUS_CODE EQUAL 0)
+            file(REMOVE "${CMAKE_BINARY_DIR}/external/ffmpeg.zip")
+            message(FATAL_ERROR "No FFMPEG prebuilt found with corresponding commit SHA (${FFMPEG_GIT_SHA})")
+        endif()
+    endif()
+
+    if(NOT EXISTS "${CMAKE_BINARY_DIR}/external/ffmpeg/lib")
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/external/ffmpeg/lib")
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf "${CMAKE_BINARY_DIR}/external/ffmpeg.zip"
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/external/ffmpeg/lib")
+    endif()
 endif()
 
 set(LIB_PREFIX "lib")
@@ -77,7 +129,7 @@ if (WIN32 AND NOT MINGW)
 		"psapi;strmiids;uuid;oleaut32;shlwapi;ws2_32;ole32;user32;bcrypt")
 elseif (APPLE)
 	target_link_libraries(${FFMPEG_CORE_NAME} INTERFACE
-		"-framework CoreServices" "-framework CoreFoundation" "-framework AudioUnit"
+		"-framework CoreServices" "-framework CoreFoundation" #"-framework AudioUnit"
 		"-framework AudioToolbox" "-framework CoreAudio" "-framework CoreMedia"
 		"-framework VideoToolbox" "-framework CoreVideo" "-framework Security")
 endif ()
